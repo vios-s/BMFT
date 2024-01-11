@@ -1,0 +1,36 @@
+_target_: src.models.mnist_module.MNISTLitModule
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 0.001
+  weight_decay: 0.0
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.1
+  patience: 10
+
+net:
+  _target_: src.models.components.head.Inception
+  pretrained: true
+
+head:
+  _target_: src.models.components.head.ClassificationHead
+  in_features: 2048 
+  out_features: 1
+
+aux1:
+  _target_: src.models.components.head.AuxiliaryHead
+  in_features: 2048
+  num_aux: 2
+
+aux2:
+  _target_: src.models.components.head.AuxiliaryHead
+  in_features: 2048
+  num_aux: 2
+
+# compile model for faster training with pytorch 2.0
+compile: false
