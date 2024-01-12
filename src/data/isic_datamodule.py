@@ -1,3 +1,4 @@
+import os
 import cv2 as cv
 from lightning.pytorch.utilities.types import TRAIN_DATALOADERS
 import numpy as np
@@ -17,16 +18,13 @@ import albumentations as A
 class ISICDataset(Dataset):
     """ISIC Dataset."""
 
-    def __init__(self, csv, split, mode, transform: transforms.Compose, transform2: transforms.Compose) -> None:
+    def __init__(self, csv, transform) -> None:
         """
         Initialize an `ISICDataset`.
         
         """
-        self.csv = csv.reset_index(drop=True)
-        self.split = split
-        self.mode = mode
+        self.csv = pd.read_csv(csv, low_memory=False).reset_index(drop=True)
         self.transform = transform
-        self.transform2 = transform2
         
 
     def __len__(self) -> int:
@@ -40,40 +38,25 @@ class ISICDataset(Dataset):
         :return: A sample from the dataset.
         """
         row = self.csv.iloc[idx]
-        
-        image = cv.imread(row.filepath)
-        image = cv.cvtColor(image, cv.COLOR_RGB2BGR)
+        # print(os.getcwd())
+        image = cv.imread(os.path.join('./data/skin/', row.filepath))
+        image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
         
         if self.transform is not None:
             res = self.transform(image=image)
             image = res['image'].astype(np.float32)
         else:
             image = image.astype(np.float32)
-            
-        # Augmenting duplicated images to treat as new data points
-        if self.transform2 is not None:
-            if self.csv.marked[idx] == 1:
-                res = self.transform2(image=image)
-                image = res['image'].astype(np.float32)
         
         image = image.transpose(2, 0, 1)
         
         data = torch.tensor(image).float()
         
-        if self.mode == 'test':
-            return data, torch.tensor(self.csv.iloc[idx].target).long()
-        
-        else:
-            if self.args.instrument:
-                return data, torch.tensor(self.csv.iloc[idx].target).long(), \
-                            torch.tensor(self.csv.iloc[idx].instrument).long(), \
-                            torch.tensor(self.csv.iloc[idx].marked).long
-                            
-            elif self.args.instrument and self.
-            
+        return data, torch.tensor(self.csv.iloc[idx].target).float()
             
 
 class ISICDataModule(LightningDataModule):
+
     """ISIC DataModule.
     
     A `LightningDataModule` implements 7 key methods:
@@ -107,10 +90,11 @@ class ISICDataModule(LightningDataModule):
     
     def __init__(
         self,
-        csv: str = "data/",
-        split: Tuple[int, int, int] = (55_000, 5_000, 10_000),
+        data_dir: str = "data/skin/csv/",
+        dataset: str = "isic_balanced",
+        testset: str = "",
         transform = None,
-        transform2= None,
+        test_transform = None,
         batch_size: int = 64,
         num_workers: int = 0,
         pin_memory: bool = False,
@@ -118,7 +102,6 @@ class ISICDataModule(LightningDataModule):
         """Initialize a `ISICDataModule`.
         
         :param csv: The data directory. Defaults to `"data/"`.
-        :param split: The train, validation and test split. Defaults to `(55_000, 5_000, 10_000)`.
         :param batch_size: The batch size. Defaults to `64`.
         :param num_workers: The number of workers. Defaults to `0`.
         :param pin_memory: Whether to pin memory. Defaults to `False`.
@@ -130,38 +113,23 @@ class ISICDataModule(LightningDataModule):
         # also ensures init params will be stored in ckpt
         self.save_hyperparameters(logger=False)
         
-        # data transformations
-        if self.transforms.skew:
-            self.transforms_marked = A.Compose([
-                A.Transpose(p=0.5),
-                A.VerticalFlip(p=0.5),
-                A.HorizontalFlip(p=0.5),
-            ])
-        else:
-            self.transforms_marked = None
-
-        # Augmentations for all training data
-        if self.model.name == 'inception':  # Special augmentation for inception to provide 299x299 images
-            self.transforms_train = A.Compose([
-                A.Resize(299, 299),
+        if transform is None:
+            self.transform= A.Compose([
+                A.Resize(256, 256),
                 A.Normalize()
             ])
-        else:
-            self.transforms_train = A.Compose([
-                A.Resize(self.data.image_size, self.data.image_size),
+            
+        if test_transform is None:
+            self.test_transform= A.Compose([
+                A.Resize(256, 256),
                 A.Normalize()
             ])
-
-        # Augmentations for validation data
-        self.transforms_val = A.Compose([
-            A.Resize(self.data.image_size, self.data.image_size),
-            A.Normalize()
-        ])
-        
-
+    
         self.data_train: Optional[Dataset] = None
         self.data_val: Optional[Dataset] = None
         self.data_test: Optional[Dataset] = None
+
+
 
         self.batch_size_per_device = batch_size
     
@@ -169,9 +137,9 @@ class ISICDataModule(LightningDataModule):
     def num_classes(self) -> int:
         """Get the number of classes.
 
-        :return: The number of MNIST classes (10).
+        :return: The number of classes (2).
         """
-        return 10
+        return 2
     
     def setup(self, stage: Optional[str] = None) -> None:
         """Load data. 
@@ -194,16 +162,17 @@ class ISICDataModule(LightningDataModule):
 
         # load and split datasets only if not loaded already
         if not self.data_train and not self.data_val and not self.data_test:
-            trainset = ISICDataset(self.hparams.csv, split=self.hparams.split, mode='train', transform=self.hparams.transforms1, transform2=self.hparams.transforms2)
-            valset = ISICDataset(self.hparams.csv, split=self.hparams.split, mode='val', transform=self.hparams.transforms1, transform2=self.hparams.transforms2)
-            testset = ISICDataset(self.hparams.csv, split=self.hparams.split, mode='test', transform=self.hparams.transforms1, transform2=self.hparams.transforms2)
+            self.data_train = ISICDataset(self.hparams.data_dir + self.hparams.dataset + '_train.csv', transform=self.transform)
+            self.data_val = ISICDataset(self.hparams.data_dir + self.hparams.dataset + '_val.csv', transform=self.transform)
+            # self.test = ISICDataset(self.hparams.data_dir + self.hparams.dataset + self.hparams.testset, transform=self.test_transforms)
+            self.test = None
             
             
     def train_dataloader(self) -> DataLoader[Any]:
         return DataLoader(
             dataset=self.data_train, 
             batch_size=self.batch_size_per_device,
-            sampler=RandomSampler(self.data_train),
+            shuffle=True,
             num_workers=self.hparams.num_workers, 
             pin_memory=self.hparams.pin_memory,
             drop_last=True)
@@ -220,3 +189,40 @@ class ISICDataModule(LightningDataModule):
             pin_memory=self.hparams.pin_memory,
             drop_last=True
         )
+
+    def test_dataloader(self) -> DataLoader[Any]:
+        """Create and return the test dataloader.
+
+        :return: The test dataloader.
+        """
+        return DataLoader(
+            dataset=self.data_test,
+            batch_size=self.batch_size_per_device,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            shuffle=False,
+        )
+        
+    def teardown(self, stage: Optional[str] = None) -> None:
+        """Lightning hook for cleaning up after `trainer.fit()`, `trainer.validate()`,
+        `trainer.test()`, and `trainer.predict()`.
+
+        :param stage: The stage being torn down. Either `"fit"`, `"validate"`, `"test"`, or `"predict"`.
+            Defaults to ``None``.
+        """
+        pass
+
+    def state_dict(self) -> Dict[Any, Any]:
+        """Called when saving a checkpoint. Implement to generate and save the datamodule state.
+
+        :return: A dictionary containing the datamodule state that you want to save.
+        """
+        return {}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        """Called when loading a checkpoint. Implement to reload datamodule state given datamodule
+        `state_dict()`.
+
+        :param state_dict: The datamodule state returned by `self.state_dict()`.
+        """
+        pass

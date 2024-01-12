@@ -8,7 +8,7 @@ defaults:
 model_checkpoint:
   dirpath: ${paths.output_dir}/checkpoints
   filename: "epoch_{epoch:03d}_step_{step}"
-  monitor: "val/psnr"
+  monitor: "val/acc"
   mode: "max"
   save_top_k: 5
   save_last: true

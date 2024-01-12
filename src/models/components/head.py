@@ -26,11 +26,11 @@ class ClassificationHead(nn.Module):
         super(ClassificationHead, self).__init__()
 
         self.layer = nn.Linear(in_features, out_features)
-        self.activation = nn.Softmax(dim=1)
+        self.activation = nn.Sigmoid()
         self.dropout = nn.Dropout(p=0.5)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.layer(self.dropout(x))
+        x = self.activation(self.layer(self.dropout(x)))
         
         return x
     
@@ -79,13 +79,13 @@ class AuxiliaryHead2(nn.Module):
     
 
 class Extractor(nn.Module):
-    def __init__(self, pretrained=True):
+    def __init__(self, weights=True):
         """
         ResNet-50 feature extractor
         """
         super(Extractor, self).__init__()
 
-        self.enet = models.resnet50(pretrained=pretrained)
+        self.enet = models.resnet50(weights=weights)
         self.dropout = nn.Dropout(p=0.5)
         in_ch = self.enet.fc.in_features
         self.enet.fc = nn.Identity()
@@ -112,65 +112,65 @@ class Extractor(nn.Module):
 
 
 class Inception(Extractor):
-    def __init__(self, pretrained=True):
+    def __init__(self, weights=True):
         """
         Inception-V3 feature extractor
         """
         super(Inception, self).__init__()
 
-        self.enet = models.inception_v3(pretrained=pretrained, aux_logits=False)
+        self.enet = models.inception_v3(weights=weights, aux_logits=False)
         self.dropout = nn.Dropout(p=0.5)
         in_ch = self.enet.fc.in_features
         self.enet.fc = nn.Identity()
     
 
 class DenseNet(Extractor):
-    def __init__(self, pretrained=True):
+    def __init__(self, weights=True):
         """
         DenseNet-161 feature extractor
         """
         super(DenseNet, self).__init__()
 
-        self.enet = models.densenet161(pretrained=pretrained)
+        self.enet = models.densenet161(weights=weights)
         self.dropout = nn.Dropout(p=0.5)
         in_ch = self.enet.fc.in_features
         self.enet.fc = nn.Identity()
         
 
 class ResNext101(Extractor):
-    def __init__(self, pretrained=True):
+    def __init__(self, weights=True):
         """
         ResNext-101 feature extractor
         """
         super(ResNext101, self).__init__()
 
-        self.enet = models.resnext101_32x8d(pretrained=pretrained)
+        self.enet = models.resnext101_32x8d(weights=weights)
         self.dropout = nn.Dropout(p=0.5)
         in_ch = self.enet.fc.in_features
         self.enet.fc = nn.Identity()
         
 
 class ResNet101(Extractor):
-    def __init__(self, pretrained=True):
+    def __init__(self, weights=True):
         """
         ResNet-101 feature extractor
         """
         super(ResNet101, self).__init__()
 
-        self.enet = models.resnet101(pretrained=pretrained)
+        self.enet = models.resnet101(weights=weights)
         self.dropout = nn.Dropout(p=0.5)
         in_ch = self.enet.fc.in_features
         self.enet.fc = nn.Identity()
         
         
 class EfficientNet(Extractor):
-    def __init__(self, pretrained=True):
+    def __init__(self, weights=True):
         """
         EfficientNet-B7 feature extractor
         """
         super(EfficientNet, self).__init__()
 
-        self.enet = models.efficientnet_v2_l(pretrained=pretrained)
+        self.enet = models.efficientnet_v2_l(weights=weights)
         self.dropout = nn.Dropout(p=0.5)
         in_ch = self.enet.fc.in_features
         self.enet.fc = nn.Identity()

@@ -3,7 +3,7 @@ _target_: src.models.skinnet_module.SkinNetLitModule
 optimizer:
   _target_: torch.optim.SGD
   _partial_: true
-  lr: 0.0003
+  lr: 0.001
   momentum: 0.9
 
 scheduler:
@@ -14,8 +14,8 @@ scheduler:
   patience: 10
 
 net:
-  _target_: src.models.components.head.Inception
-  pretrained: true
+  _target_: src.models.components.head.ResNet101
+  weights: "ResNet101_Weights.DEFAULT"
 
 head:
   _target_: src.models.components.head.ClassificationHead
@@ -34,4 +34,3 @@ head:
 
 # compile model for faster training with pytorch 2.0
 compile: false
-

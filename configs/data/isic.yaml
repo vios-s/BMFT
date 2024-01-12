@@ -1,6 +1,9 @@
 _target_: src.data.isic_datamodule.ISICDataModule
-data_dir: ${paths.data_dir}
-batch_size: 128 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
-train_val_test_split: [55_000, 5_000, 10_000]
-num_workers: 0
+data_dir: ${paths.skin_dir}
+dataset: "isic_balanced"
+testset: null
+transform: null
+test_transform: null
+batch_size: 64 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
+num_workers: 8
 pin_memory: False

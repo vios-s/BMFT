@@ -53,7 +53,7 @@ class SkinNetLitModule(LightningModule):
 
         # this line allows to access init params with 'self.hparams' attribute
         # also ensures init params will be stored in ckpt
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters(logger=False, ignore=['net', 'head'])
 
         # model
         self.net = net
@@ -63,9 +63,9 @@ class SkinNetLitModule(LightningModule):
         self.criterion = torch.nn.CrossEntropyLoss()
 
         # metrics
-        self.train_acc = Accuracy(task="multiclass", num_classes=10)
-        self.valid_acc = Accuracy(task="multiclass", num_classes=10)
-        self.test_acc = Accuracy(task="multiclass", num_classes=10)
+        self.train_acc = Accuracy(task="binary", num_classes=2)
+        self.val_acc = Accuracy(task="binary", num_classes=2)
+        self.test_acc = Accuracy(task="binary", num_classes=2)
 
         # for averaging loss across batches
         self.train_loss = MeanMetric()
@@ -90,18 +90,18 @@ class SkinNetLitModule(LightningModule):
         self.val_acc_best.reset()
         
     def model_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int, stage: str
-    ):
+        self, batch: Tuple[torch.Tensor, torch.Tensor]):
         """Perform a step through the model `self.net`.
 
         :param batch: The batch of data.
-        :param batch_idx: The batch index.
-        :param stage: The stage of training.
         """
         x, y = batch
-        logits = self(x)
+        logits = self.forward(x).squeeze(1)
+        # print(logits, y)
         loss = self.criterion(logits, y)
-        preds = torch.argmax(logits, dim=1)
+        preds = ((logits>0.5).float())
+        
+        # print(preds)
         return loss, preds, y
     
     def training_step(
