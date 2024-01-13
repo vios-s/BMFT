@@ -116,6 +116,7 @@ class ISICDataModule(LightningDataModule):
         if transform is None:
             self.transform= A.Compose([
                 A.Resize(256, 256),
+                A.HorizontalFlip(p=0.5),
                 A.Normalize()
             ])
             

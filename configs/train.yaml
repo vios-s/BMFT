@@ -5,7 +5,7 @@
 defaults:
   - _self_
   - data: isic
-  - model: resnet101
+  - model: resnet50
   - callbacks: default
   - logger: comet # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
   - trainer: gpu
@@ -16,7 +16,7 @@ defaults:
 
   # experiment configs allow for version control of specific hyperparameters
   # e.g. best hyperparameters for given model and datamodule
-  - experiment: resnet101
+  - experiment: resnet50
 
   # config for hyperparameter optimization
   - hparams_search: null

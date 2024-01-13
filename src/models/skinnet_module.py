@@ -60,7 +60,8 @@ class SkinNetLitModule(LightningModule):
         self.head = head
         
         # loss function
-        self.criterion = torch.nn.CrossEntropyLoss()
+        self.criterion = torch.nn.BCELoss()
+        # torch.nn.CrossEntropyLoss(reduction='none')
 
         # metrics
         self.train_acc = Accuracy(task="binary", num_classes=2)
@@ -97,11 +98,8 @@ class SkinNetLitModule(LightningModule):
         """
         x, y = batch
         logits = self.forward(x).squeeze(1)
-        # print(logits, y)
         loss = self.criterion(logits, y)
         preds = ((logits>0.5).float())
-        
-        # print(preds)
         return loss, preds, y
     
     def training_step(
