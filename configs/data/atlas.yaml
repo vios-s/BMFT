@@ -1,0 +1,9 @@
+_target_: src.data.atlas_datamodule.ATLASDataModule
+data_dir: ${paths.skin_dir}
+dataset: null
+testset: 'atlas_target'
+transform: null
+test_transform: null
+batch_size: 64 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
+num_workers: 8
+pin_memory: False
