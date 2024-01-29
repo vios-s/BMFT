@@ -5,14 +5,14 @@
 
 defaults:
   - override /data: isic
-  - override /model: resnet101
+  - override /model: densenet
   - override /callbacks: default
   - override /trainer: gpu
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["isic", "resnet101"]
+tags: ["isic", "densenet101"]
 
 seed: 42
 
