@@ -4,6 +4,7 @@ import torch
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.accuracy import Accuracy
+from torchmetrics.classification.auroc import AUROC
 
 class SkinNetLitModule(LightningModule):
     """A `LightningModule` for SkinNet classification.
@@ -58,9 +59,16 @@ class SkinNetLitModule(LightningModule):
         # model
         self.net = net
         self.head = head
-        
+
+        # class_counts = torch.tensor([951.0, 33647.0])
+        # class_weights = 1. / class_counts
+        #
+        # # Normalizing the weights (optional)
+        # class_weights = class_weights / class_weights.sum()
+
+        self.criterion = torch.nn.BCEWithLogitsLoss()
         # loss function
-        self.criterion = torch.nn.BCELoss()
+        # self.criterion = torch.nn.BCELoss()
         # torch.nn.CrossEntropyLoss(reduction='none')
 
         # metrics
@@ -68,14 +76,20 @@ class SkinNetLitModule(LightningModule):
         self.val_acc = Accuracy(task="binary", num_classes=2)
         self.test_acc = Accuracy(task="binary", num_classes=2)
 
+        self.train_auc = AUROC(task="binary", num_classes=2)
+        self.val_auc = AUROC(task="binary", num_classes=2)
+        self.test_auc = AUROC(task="binary", num_classes=2)
+
         # for averaging loss across batches
         self.train_loss = MeanMetric()
         self.val_loss = MeanMetric()
         self.test_loss = MeanMetric()
         
         # for tracking best so far validation accuracy
-        self.val_acc_best = MaxMetric()
-        
+        # self.val_acc_best = MaxMetric()
+        self.val_auc_best = MaxMetric()
+
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
 
@@ -88,7 +102,9 @@ class SkinNetLitModule(LightningModule):
         """Called when the train begins."""
         self.val_loss.reset()
         self.val_acc.reset()
-        self.val_acc_best.reset()
+        self.val_auc.reset()
+        # self.val_acc_best.reset()
+        self.val_auc_best.reset()
         
     def model_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor]):
@@ -98,7 +114,14 @@ class SkinNetLitModule(LightningModule):
         """
         x, y = batch
         logits = self.forward(x).squeeze(1)
-        loss = self.criterion(logits, y)
+        count_pos = torch.sum(y) * 1.0 + 1e-10
+        count_neg = torch.sum(1. - y) * 1.0
+        beta = count_neg / count_pos
+        beta_back = count_pos / (count_pos + count_neg)
+
+        bce1 = torch.nn.BCEWithLogitsLoss(pos_weight=beta)
+        loss = beta_back * bce1(logits, y)
+        # loss = self.criterion(logits, y)
         preds = ((logits>0.5).float())
         return loss, preds, y
     
@@ -116,8 +139,10 @@ class SkinNetLitModule(LightningModule):
         
         self.train_loss(loss)
         self.train_acc(preds, targets)
+        self.train_auc(preds, targets)
         self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("train/acc", self.train_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("train/auc", self.train_auc, on_step=False, on_epoch=True, prog_bar=True)
         
         return loss
     
@@ -136,16 +161,21 @@ class SkinNetLitModule(LightningModule):
         # update and log metrics
         self.val_loss(loss)
         self.val_acc(preds, targets)
+        self.val_auc(preds, targets)
         self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val/acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val/auc", self.val_auc, on_step=False, on_epoch=True, prog_bar=True)
         
     def on_validation_epoch_end(self) -> None:
         "Lightning hook that is called when a validation epoch ends."
-        acc = self.val_acc.compute()  # get current val acc
-        self.val_acc_best(acc)  # update best so far val acc
+        # acc = self.val_acc.compute()  # get current val acc
+        # self.val_acc_best(acc) # update best so far val acc
+        auc = self.val_auc.compute()  # get current val auc
+        self.val_auc_best(auc)
         # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
         # otherwise metric would be reset by lightning after each epoch
-        self.log("val/acc_best", self.val_acc_best.compute(), sync_dist=True, prog_bar=True)
+        # self.log("val/acc_best", self.val_acc_best.compute(), sync_dist=True, prog_bar=True)
+        self.log("val/auc_best", self.val_auc_best.compute(), sync_dist=True, prog_bar=True)
         
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         """Perform a single test step on a batch of data from the test set.
@@ -159,8 +189,10 @@ class SkinNetLitModule(LightningModule):
         # update and log metrics
         self.test_loss(loss)
         self.test_acc(preds, targets)
+        self.test_auc(preds, targets)
         self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test/acc", self.test_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("test/auc", self.test_auc, on_step=False, on_epoch=True, prog_bar=True)
 
     def on_test_epoch_end(self) -> None:
         """Lightning hook that is called when a test epoch ends."""
