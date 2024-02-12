@@ -117,9 +117,9 @@ class Inception(Extractor):
         Inception-V3 feature extractor
         """
         super(Inception, self).__init__()
-
-        self.enet = models.inception_v3(weights=weights, aux_logits=False)
-        self.dropout = nn.Dropout(p=0.5)
+        self.enet = models.inception_v3(weights=weights)
+        self.enet.aux_logits = False
+        self.dropouts = nn.Dropout(0.5)
         in_ch = self.enet.fc.in_features
         self.enet.fc = nn.Identity()
     
@@ -133,8 +133,8 @@ class DenseNet(Extractor):
 
         self.enet = models.densenet161(weights=weights)
         self.dropout = nn.Dropout(p=0.5)
-        in_ch = self.enet.fc.in_features
-        self.enet.fc = nn.Identity()
+        in_ch = self.enet.classifier.in_features
+        self.enet.classifier = nn.Identity()
         
 
 class ResNext101(Extractor):
@@ -170,7 +170,22 @@ class EfficientNet(Extractor):
         """
         super(EfficientNet, self).__init__()
 
-        self.enet = models.efficientnet_v2_l(weights=weights)
+        # self.enet = geffnet.create_model('efficientnet_b3', pretrained=True)
+        self.enet = models.efficientnet_b3(weights=weights)
+        self.dropout = nn.Dropout(p=0.5)
+        in_ch = self.enet.classifier[1].in_features
+        self.enet.classifier[1] = nn.Identity()
+
+
+class ResNet18(Extractor):
+    def __int__(self, weights=True):
+        """
+        ResNet18 feature extractor
+        """
+        super(EfficientNet, self).__init__()
+
+        # self.enet = geffnet.create_model('efficientnet_b3', pretrained=True)
+        self.enet = models.resnet18(weights=weights)
         self.dropout = nn.Dropout(p=0.5)
         in_ch = self.enet.fc.in_features
         self.enet.fc = nn.Identity()
