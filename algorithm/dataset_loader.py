@@ -4,8 +4,12 @@ import pandas as pd
 import cv2 as cv
 import numpy as np
 import albumentations as A
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 from torch.utils.data import Dataset, DataLoader
+from arguments import *
+
+args = parse_args()
+
 
 class TestDataset(Dataset):
     """Dataset."""
@@ -31,15 +35,19 @@ class TestDataset(Dataset):
         """
         row = self.csv.iloc[idx]
         # print(os.getcwd())
-        image_path = os.path.join('./data/skin/', row.filepath)
+        if 'data/skin/' not in row.filepath:
+            image_path = os.path.join('./data/skin/', row.filepath)
+        else:
+            image_path = os.path.join(row.filepath)
+
         image = cv.imread(image_path)
         image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
 
         if self.transform is not None:
-          res = self.transform(image=image)
-          image = res['image'].astype(np.float32)
+            res = self.transform(image=image)
+            image = res['image'].astype(np.float32)
         else:
-          image = image.astype(np.float32)
+            image = image.astype(np.float32)
 
         image = image.astype(np.float32)
         image = image.transpose(2, 0, 1)
@@ -50,14 +58,40 @@ class TestDataset(Dataset):
         return data, label, attr
 
 
-def get_dataset(csv, attr, transform=None, batch_size=64, shuffle=False):
+def criterion_func(df):
+    lst = df['target'].value_counts().sort_index().tolist()
+    sum_lst = sum(lst)
+    class_freq = []
+    for i in lst:
+        class_freq.append(i / sum_lst * 100)
+    weights = torch.tensor(class_freq, dtype=torch.float32)
+
+    weights = weights / weights.sum()
+    weights = 1.0 / weights
+    weights = weights / weights.sum()
+    weights = weights.to(device)
+
+    return weights
+
+
+def load_dataset(dataset, batch_size=64, shuffle=False) -> DataLoader[Any]:
+    return DataLoader(
+        dataset=dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=args.num_workers,
+        pin_memory=args.pin_memory,
+    )
+
+
+def get_dataset(csv, attr, transform=None):
     if transform is None:
-      transform = A.Compose([
-          A.Resize(256, 256),
-          A.HorizontalFlip(p=0.5),
-          A.Normalize()
-      ])
+        transform = A.Compose([
+            A.Resize(256, 256),
+            A.HorizontalFlip(p=0.5),
+            A.Normalize()
+        ])
 
-    data_loader = DataLoader(TestDataset(csv, attr, transform), batch_size=batch_size, shuffle=shuffle)
+    dataset = TestDataset(csv, attr, transform)
 
-    return data_loader
+    return dataset
