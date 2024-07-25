@@ -9,6 +9,7 @@ from torch.utils.data import Dataset, DataLoader
 from arguments import *
 
 args = parse_args()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class TestDataset(Dataset):
@@ -19,7 +20,7 @@ class TestDataset(Dataset):
         Initialize an `ATLASDataset`.
 
         """
-        self.csv = pd.read_csv(csv, low_memory=False).reset_index(drop=True)
+        self.csv = csv
         self.transform = transform
         self.attr = attr
 
@@ -35,10 +36,21 @@ class TestDataset(Dataset):
         """
         row = self.csv.iloc[idx]
         # print(os.getcwd())
-        if 'data/skin/' not in row.filepath:
-            image_path = os.path.join('./data/skin/', row.filepath)
-        else:
-            image_path = os.path.join(row.filepath)
+        if args.task == 'skin':
+            if 'data/skin/' not in row.filepath:
+                if 'data/Skin/' in row.filepath:
+                    image_path = row.filepath
+                    image_path = image_path.replace('data/Skin/', 'data/skin/')
+                else:
+                    image_path = os.path.join('data/skin/', row.filepath)
+            else:
+                image_path = row.filepath
+        if args.task == 'xray':
+            if 'data/chestXray/' not in row.filepath:
+                image_path = os.path.join('data/chestXray/', row.filepath)
+            else:
+                image_path = row.filepath
+
 
         image = cv.imread(image_path)
         image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
@@ -58,20 +70,60 @@ class TestDataset(Dataset):
         return data, label, attr
 
 
-def criterion_func(df):
-    lst = df['target'].value_counts().sort_index().tolist()
-    sum_lst = sum(lst)
-    class_freq = []
-    for i in lst:
-        class_freq.append(i / sum_lst * 100)
-    weights = torch.tensor(class_freq, dtype=torch.float32)
+def target_dataset_balance(df, target):
+    target0 = df[df[target] == 0]
+    target1 = df[df[target] == 1]
+    if len(target0) > len(target1):
+        # index = np.random.randint(len(target1), size=len(target0))
+        index = np.random.randint(len(target1), size=len(target1))
+        target1 = target1.iloc[list(index)]
+    else:
+        index = np.random.randint(len(target0), size=len(target1))
+        target0 = target0.iloc[list(index)]
+    csv = pd.concat([target0, target1], ignore_index=True)
+    return csv
 
-    weights = weights / weights.sum()
-    weights = 1.0 / weights
-    weights = weights / weights.sum()
-    weights = weights.to(device)
 
-    return weights
+def dataset_balance(df, attribute, target, downsample=0):
+    group0 = df[df[attribute] == 0]
+    group1 = df[df[attribute] == 1]
+    if len(group0) > len(group1):
+        df0, df1 = split_dataset(group0, group1, target, downsample)
+    else:
+        df0, df1 = split_dataset(group1, group0, target, downsample)
+
+    csv = pd.concat([df0, df1], ignore_index=True)
+    return csv
+
+
+def split_dataset(df0, df1, target, downsample):
+    group0_target0 = df0[df0[target] == 0]
+    group0_target1 = df0[df0[target] == 1]
+    group1_target0 = df1[df1[target] == 0]
+    group1_target1 = df1[df1[target] == 1]
+    if downsample:
+        index_target0 = np.random.randint(len(group0_target0), size=len(group1_target0))
+        down_target0 = group0_target0.iloc[list(index_target0)]
+        index_target1 = np.random.randint(len(group0_target1), size=len(group1_target1))
+        down_target1 = group0_target1.iloc[list(index_target1)]
+        df0 = pd.concat([down_target0, down_target1], ignore_index=True)
+    else:
+        index_target0 = np.random.randint(len(group1_target0), size=len(group0_target0))
+        up_target0 = group1_target0.iloc[list(index_target0)]
+        index_target1 = np.random.randint(len(group1_target1), size=len(group0_target1))
+        up_target1 = group0_target1.iloc[list(index_target1)]
+        df1 = pd.concat([up_target0, up_target1], ignore_index=True)
+
+    return df0, df1
+
+
+def cal_pos_weight(df):
+    pos_count = df['target'].sum() * 1.0 + 1e-10
+    neg_count = (len(df) - pos_count)*1.0
+    ratio = neg_count/pos_count
+    pos_weight = torch.tensor(ratio, device=device)
+
+    return pos_weight
 
 
 def load_dataset(dataset, batch_size=64, shuffle=False) -> DataLoader[Any]:
@@ -84,13 +136,21 @@ def load_dataset(dataset, batch_size=64, shuffle=False) -> DataLoader[Any]:
     )
 
 
-def get_dataset(csv, attr, transform=None):
-    if transform is None:
+def get_dataset(csv, attr, transform=None, mode='train'):
+    if mode == 'train':
+        if transform is None:
+            transform = A.Compose([
+                A.Resize(256, 256),
+                A.HorizontalFlip(p=0.5),
+                A.VerticalFlip(p=0.5),
+                A.Transpose(p=0.5),
+                A.Normalize()
+            ])
+    else:
         transform = A.Compose([
-            A.Resize(256, 256),
-            A.HorizontalFlip(p=0.5),
-            A.Normalize()
-        ])
+                A.Resize(256, 256),
+                A.Normalize()
+            ])
 
     dataset = TestDataset(csv, attr, transform)
 
